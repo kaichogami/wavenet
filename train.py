@@ -18,13 +18,13 @@ import tensorflow as tf
 import numpy as np
 import librosa
 
-LEARNING_RATE = 0.003
-TRAINING_ITER = 10
+LEARNING_RATE = 0.009
+TRAINING_ITER = 50
 MOMENTUM = 0.9
 
 # runs on 3000 sampling rate and 15 seconds length
 audio_frequency = 3000
-receptive_seconds = 1
+receptive_seconds = 0.65
 filter_width = 2
 residual_channels = 2
 dilation_channels = 2
@@ -45,14 +45,13 @@ def _get_music_array(data):
     return y[0:audio_frequency * audio_trim_secs]
 
 if __name__ == '__main__':
-    # change it into any genere you want, available
     file_list = _get_data_files("classical")
     model = Wavenet(audio_frequency, receptive_seconds, filter_width,
                     residual_channels, dilation_channels, skip_channels,
                     quantization_channels)
 
     # Make sure batch=1 
-    X = tf.placeholder(tf.int32, shape=[1, 1, audio_frequency * audio_trim_secs , 1])
+    X = tf.placeholder(tf.float32, shape=[1, 1, audio_frequency * audio_trim_secs , 1])
     # define loss and optimizer
     loss = model.loss(X)
     optimizer = tf.train.MomentumOptimizer(LEARNING_RATE, MOMENTUM).minimize(loss)
@@ -62,8 +61,10 @@ if __name__ == '__main__':
     config = tf.ConfigProto(log_device_placement=False)
     with tf.Session(config=config) as sess:
         try:
-            saver.restore(sess, "/input/training.ckpt")
+            saver.restore(sess, "./training.ckpt")
+            print("loaded saved files successfuly")
         except:
+            print("failed to load")
             init = tf.global_variables_initializer()
             sess.run(init)
         for i in xrange(TRAINING_ITER):
@@ -71,7 +72,7 @@ if __name__ == '__main__':
                 data = np.reshape(_get_music_array(file_list[j]),
                                   [1, 1, audio_frequency * audio_trim_secs, 1])
                 sess.run(optimizer, feed_dict={X : data})
-    save_path = saver.save(sess, "/output/training.ckpt")
-    print("save in {0}").format(save_path)
+                save_path = saver.save(sess, "/output/training.ckpt")
+                print("save in {0}").format(save_path)
 
     print("done")

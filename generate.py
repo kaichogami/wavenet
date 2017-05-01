@@ -6,7 +6,7 @@ import librosa
 import tensorflow as tf
 
 audio_frequency = 3000
-receptive_seconds = .65
+receptive_seconds = 0.65
 filter_width = 2
 residual_channels = 2
 dilation_channels = 2
@@ -14,7 +14,7 @@ skip_channels = 2
 quantization_channels = 256
 audio_trim_secs = 9
 
-data = librosa.load("first.wav", audio_frequency)
+data, _ = librosa.load("first.wav", audio_frequency)
 
 if __name__ == '__main__':
     model = Wavenet(audio_frequency, receptive_seconds, filter_width,
@@ -23,7 +23,11 @@ if __name__ == '__main__':
 
     saver = tf.train.Saver()
     with tf.Session() as sess:
-        saver.restore(sess, "/input/training.ckpt")
+        try:
+            saver.restore(sess, "./training.ckpt")
+            print("loadded scuccesffuly")
+        except:
+            raise ValueError("couldnt load")
 
         # test code
         # X  = np.float32(np.random.randint(1, 256,(1,1,1000,1)))
@@ -34,4 +38,3 @@ if __name__ == '__main__':
 
     librosa.output.write_wav("/output/example.wav", np.reshape(music, [-1]), audio_frequency)
     print("done writing")
-

@@ -265,7 +265,7 @@ class Wavenet:
             prob = tf.nn.softmax(out)
 
             # return index + 1 to get the quantization channel value
-            return tf.reshape(tf.argmax(prob, axis=1)[0], [1,1,1,1])
+            return tf.to_int32(tf.reshape(tf.argmax(prob, axis=1)[0], [1,1,1,1])) + 1
 
     def generate(self, seconds, song):
         """Generate audio based on trained model.
@@ -284,8 +284,11 @@ class Wavenet:
             if len(song) < receptive_samples:
                 print(len(song), receptive_samples)
                 raise ValueError("enter longer song or shorter receptive field")
-            current = np.random.randint(0, 256, [1, 1, song[:receptive_samples], 1])
-            total_waveform = np.copy(current)
+            current = song[1000:receptive_samples+3000]
+            current = np.reshape(current, [1,1,current.shape[0], 1])
+            total_waveform = tf.to_int32(tf.reverse(np.copy(current), [2]))
+            current = tf.reverse(current, [2])
+            current = _mu_law_encode(current, self.quantization_channels)
 
             for i in xrange(receptive_samples, total_samples):
                 next_sample = self._generate_next_sample(current)
@@ -348,16 +351,16 @@ def _get_rounded_receptive_samples(audio_frequency, receptive_field):
 
 def _mu_law_encode(audio, quantization_channels):
     '''Quantizes waveform amplitudes.'''
-    mu = tf.to_float(quantization_channels - 1)
-    # copied from https://github.com/ibab/tensorflow-wavenet/blob/master/wavenet/ops.py
-    # Perform mu-law companding transformation (ITU-T, 1988).
-    # Minimum operation is here to deal with rare large amplitudes caused
-    # by resampling.
-    safe_audio_abs = tf.minimum(tf.abs(audio), 1)
-    magnitude = tf.log1p(mu * tf.to_float(safe_audio_abs)) / tf.log1p(mu)
-    signal = tf.sign(audio) * tf.to_int32(magnitude)
-    # Quantize signal to the specified number of levels.
-    return tf.to_int32((tf.to_float(signal) + 1.) / 2. * mu + 0.5)
+    with tf.name_scope('encode'):
+        mu = tf.to_float(quantization_channels - 1)
+        # Perform mu-law companding transformation (ITU-T, 1988).
+        # Minimum operation is here to deal with rare large amplitudes caused
+        # by resampling.
+        safe_audio_abs = tf.minimum(tf.abs(audio), 1.0)
+        magnitude = tf.log1p(mu * safe_audio_abs) / tf.log1p(mu)
+        signal = tf.sign(audio) * magnitude
+        # Quantize signal to the specified number of levels.
+        return tf.to_int32((signal + 1) / 2 * mu + 0.5)
 
 def _mu_law_decode(output, quantization_channels):
     '''Recovers waveform from quantized values.'''
