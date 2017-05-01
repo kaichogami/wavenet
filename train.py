@@ -17,6 +17,9 @@ import tarfile
 import tensorflow as tf
 import numpy as np
 import librosa
+import scipy
+
+from tensorflow.python.lib.io import file_io
 
 LEARNING_RATE = 0.009
 TRAINING_ITER = 50
@@ -30,28 +33,27 @@ residual_channels = 2
 dilation_channels = 2
 skip_channels = 2
 quantization_channels = 256
-audio_trim_secs = 9
+audio_trim_secs = 25
+
+PATH = "gs://wavenet/genres/classical/"
 
 # works for only http://opihi.cs.uvic.ca/sound/genres.tar.gz
-def _get_data_files(genre):
-    list_files = os.listdir(("/input/music/genres/{0}".format(genre)))
-    for i in xrange(len(list_files)):
-        list_files[i] = ("/input/music/genres/{0}/{1}").format(genre, list_files[i])
+# and only for google cloud
+def _get_data(genre, i):
+    temp_path = PATH + "classical." + str(i).zfill(5) + '.au'
+    with file_io.FileIO(temp_path, 'r') as f:
+        data = scipy.io.wavefile.read(f)
+    data = librosa.core.resample(data[1], data[0], audio_frequency)
 
-    return list_files
-
-def _get_music_array(data):
-    y, sr = librosa.load(data, audio_frequency)
-    return y[0:audio_frequency * audio_trim_secs]
+    return data[:audio_frequency * audio_trim_secs]
 
 if __name__ == '__main__':
-    file_list = _get_data_files("classical")
     model = Wavenet(audio_frequency, receptive_seconds, filter_width,
                     residual_channels, dilation_channels, skip_channels,
                     quantization_channels)
 
     # Make sure batch=1 
-    X = tf.placeholder(tf.float32, shape=[1, 1, audio_frequency * audio_trim_secs , 1])
+    X = tf.placeholder(tf.float32, shape=[1, 1, audio_frequency * audio_trim_secs, 1])
     # define loss and optimizer
     loss = model.loss(X)
     optimizer = tf.train.MomentumOptimizer(LEARNING_RATE, MOMENTUM).minimize(loss)
@@ -68,8 +70,8 @@ if __name__ == '__main__':
             init = tf.global_variables_initializer()
             sess.run(init)
         for i in xrange(TRAINING_ITER):
-            for j in xrange(len(file_list)):
-                data = np.reshape(_get_music_array(file_list[j]),
+            for j in xrange(100):
+                data = np.reshape(_get_data("classical", j),
                                   [1, 1, audio_frequency * audio_trim_secs, 1])
                 sess.run(optimizer, feed_dict={X : data})
                 save_path = saver.save(sess, "/output/training.ckpt")
